@@ -1,0 +1,496 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+
+// Schemas de validación Zod
+const supplierSchema = z.object({
+  name: z.string().min(1, "El nombre es requerido"),
+  contact_email: z.string().email("Email inválido").optional().or(z.literal("")),
+  phone: z.string().optional(),
+});
+
+const categorySchema = z.object({
+  name: z.string().min(1, "El nombre es requerido"),
+  color: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, "Color inválido").optional().or(z.literal("")),
+});
+
+const productSchema = z.object({
+  name: z.string().min(1, "El nombre es requerido"),
+  sku: z.string().min(1, "El SKU es requerido"),
+  description: z.string().optional(),
+  min_stock: z.number().int().min(0, "El stock mínimo debe ser 0 o mayor"),
+  category_id: z.number().int().positive("La categoría es requerida"),
+});
+
+const movementSchema = z.object({
+  product_id: z.string().uuid("ID de producto inválido"),
+  type: z.enum(["Entrada", "Salida"], {
+    errorMap: () => ({ message: "El tipo debe ser 'Entrada' o 'Salida'" }),
+  }),
+  // Usa coerce para convertir el string del input a número automáticamente
+  quantity: z.coerce
+    .number({
+      required_error: "La cantidad es requerida",
+      invalid_type_error: "La cantidad debe ser un número",
+    })
+    .int("La cantidad debe ser un número entero")
+    .positive("La cantidad debe ser mayor a 0")
+    .min(1, "La cantidad debe ser al menos 1"),
+  // Campos opcionales
+  lot_number: z.string().optional().nullable(),
+  expiration_date: z.string().optional().nullable(),
+  supplier_id: z.string().uuid("ID de proveedor inválido").optional().nullable(),
+  recipient: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  // Validación Condicional Lógica
+  if (data.type === "Entrada") {
+    // Para Entradas, el proveedor es recomendado pero no obligatorio
+    // (puede ser una entrada manual sin proveedor)
+    if (data.supplier_id && !z.string().uuid().safeParse(data.supplier_id).success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "ID de proveedor inválido",
+        path: ["supplier_id"],
+      });
+    }
+  }
+  
+  if (data.type === "Salida") {
+    // Para Salidas, el destinatario es recomendado pero no obligatorio
+    // (puede ser una salida interna o ajuste de inventario)
+    if (data.recipient && data.recipient.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El destinatario no puede estar vacío si se proporciona",
+        path: ["recipient"],
+      });
+    }
+  }
+
+  // Validar formato de fecha si se proporciona
+  if (data.expiration_date) {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(data.expiration_date)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Formato de fecha inválido. Use YYYY-MM-DD",
+        path: ["expiration_date"],
+      });
+    }
+  }
+});
+
+export async function createSupplier(formData: FormData) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        error: "No autenticado",
+      };
+    }
+
+    // Obtener organization_id del usuario
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        error: "Error al obtener información del usuario",
+      };
+    }
+
+    // Validar datos
+    const rawData = {
+      name: formData.get("name") as string,
+      contact_email: formData.get("contact_email") as string,
+      phone: formData.get("phone") as string,
+    };
+
+    const validatedData = supplierSchema.parse(rawData);
+
+    // Insertar proveedor
+    const { data, error } = await supabase
+      .from("suppliers")
+      .insert({
+        ...validatedData,
+        organization_id: profile.organization_id,
+        contact_email: validatedData.contact_email || null,
+        phone: validatedData.phone || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error al crear proveedor:", error);
+      return {
+        error: error.message,
+      };
+    }
+
+    revalidatePath("/dashboard/suppliers");
+    return {
+      success: true,
+      data,
+      message: "Proveedor creado correctamente",
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const firstError = error.errors && error.errors.length > 0 
+        ? error.errors[0].message 
+        : "Error de validación";
+      return {
+        error: firstError,
+      };
+    }
+    console.error("Error inesperado en createSupplier:", error);
+    return {
+      error: error instanceof Error ? error.message : "Error inesperado al crear proveedor",
+    };
+  }
+}
+
+export async function createProduct(formData: FormData) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        error: "No autenticado",
+      };
+    }
+
+    // Obtener organization_id del usuario
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        error: "Error al obtener información del usuario",
+      };
+    }
+
+    // Validar datos
+    const rawData = {
+      name: formData.get("name") as string,
+      sku: formData.get("sku") as string,
+      description: formData.get("description") as string,
+      min_stock: Number(formData.get("min_stock")),
+      category_id: Number(formData.get("category_id")),
+    };
+
+    const validatedData = productSchema.parse(rawData);
+
+    // Verificar que el SKU no exista en la organización
+    const { data: existingProduct } = await supabase
+      .from("products")
+      .select("id")
+      .eq("sku", validatedData.sku)
+      .eq("organization_id", profile.organization_id)
+      .single();
+
+    if (existingProduct) {
+      return {
+        error: "Ya existe un producto con este SKU en tu organización",
+      };
+    }
+
+    // Insertar producto
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        ...validatedData,
+        organization_id: profile.organization_id,
+        current_stock: 0,
+        stock: 0, // Mantener compatibilidad
+        description: validatedData.description || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error al crear producto:", error);
+      return {
+        error: error.message,
+      };
+    }
+
+    revalidatePath("/dashboard/inventory");
+    return {
+      success: true,
+      data,
+      message: "Producto creado correctamente",
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const firstError = error.errors && error.errors.length > 0 
+        ? error.errors[0].message 
+        : "Error de validación";
+      return {
+        error: firstError,
+      };
+    }
+    console.error("Error inesperado en createProduct:", error);
+    return {
+      error: error instanceof Error ? error.message : "Error inesperado al crear producto",
+    };
+  }
+}
+
+export async function registerMovement(formData: FormData) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        error: "No autenticado",
+      };
+    }
+
+    // Obtener organization_id del usuario
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        error: "Error al obtener información del usuario",
+      };
+    }
+
+    // Extraer datos del FormData
+    const rawData = {
+      product_id: formData.get("product_id") as string,
+      type: formData.get("type") as string,
+      quantity: formData.get("quantity") as string,
+      lot_number: formData.get("lot_number") as string | null,
+      expiration_date: formData.get("expiration_date") as string | null,
+      supplier_id: formData.get("supplier_id") as string | null,
+      recipient: formData.get("recipient") as string | null,
+      notes: formData.get("notes") as string | null,
+    };
+
+    // Debugging: Log de datos recibidos (solo en desarrollo)
+    if (process.env.NODE_ENV === "development") {
+      console.log("[registerMovement] Datos recibidos:", {
+        product_id: rawData.product_id,
+        type: rawData.type,
+        quantity: rawData.quantity,
+        has_lot_number: !!rawData.lot_number,
+        has_expiration_date: !!rawData.expiration_date,
+        has_supplier_id: !!rawData.supplier_id,
+        has_recipient: !!rawData.recipient,
+      });
+    }
+
+    // Validar datos con Zod (coerce manejará la conversión automáticamente)
+    const validatedData = movementSchema.parse({
+      product_id: rawData.product_id || "",
+      type: rawData.type || "",
+      quantity: rawData.quantity || "0",
+      lot_number: rawData.lot_number || null,
+      expiration_date: rawData.expiration_date || null,
+      supplier_id: rawData.supplier_id || null,
+      recipient: rawData.recipient || null,
+      notes: rawData.notes || null,
+    });
+
+    // Si es Salida, verificar stock suficiente
+    if (validatedData.type === "Salida") {
+      const { data: product, error: productError } = await supabase
+        .from("products")
+        .select("current_stock, name")
+        .eq("id", validatedData.product_id)
+        .single();
+
+      if (productError || !product) {
+        return {
+          error: "Producto no encontrado",
+        };
+      }
+
+      if (product.current_stock < validatedData.quantity) {
+        return {
+          error: `Stock insuficiente. Stock actual: ${product.current_stock}, solicitado: ${validatedData.quantity}`,
+        };
+      }
+    }
+
+    // Insertar movimiento (el trigger actualizará el stock automáticamente)
+    const { data, error } = await supabase
+      .from("movements")
+      .insert({
+        ...validatedData,
+        organization_id: profile.organization_id,
+        created_by: user.id,
+        supplier_id: validatedData.supplier_id || null,
+        recipient: validatedData.recipient || null,
+        lot_number: validatedData.lot_number || null,
+        expiration_date: validatedData.expiration_date || null,
+        notes: validatedData.notes || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error al registrar movimiento:", error);
+      return {
+        error: error.message,
+      };
+    }
+
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard");
+    return {
+      success: true,
+      data,
+      message: "Movimiento registrado correctamente",
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      // Mejor debugging: mostrar todos los errores en desarrollo
+      if (process.env.NODE_ENV === "development") {
+        console.error("[registerMovement] Errores de validación:", {
+          errors: error.errors,
+          issues: error.issues,
+        });
+      }
+
+      // Obtener el primer error o un mensaje genérico
+      const firstError = error.errors && error.errors.length > 0 
+        ? error.errors[0].message 
+        : "Error de validación";
+      
+      // Si hay múltiples errores, combinarlos en desarrollo
+      const errorMessage = process.env.NODE_ENV === "development" && error.errors.length > 1
+        ? `${firstError} (y ${error.errors.length - 1} error(es) más)`
+        : firstError;
+
+      return {
+        error: errorMessage,
+      };
+    }
+    
+    // Log detallado de errores inesperados
+    console.error("[registerMovement] Error inesperado:", {
+      error,
+      message: error instanceof Error ? error.message : "Error desconocido",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    
+    return {
+      error: error instanceof Error 
+        ? `Error al registrar movimiento: ${error.message}` 
+        : "Error inesperado al registrar movimiento",
+    };
+  }
+}
+
+export async function createCategory(formData: FormData) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        error: "No autenticado",
+      };
+    }
+
+    // Obtener organization_id del usuario
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        error: "Error al obtener información del usuario",
+      };
+    }
+
+    // Validar datos
+    const rawData = {
+      name: formData.get("name") as string,
+      color: formData.get("color") as string,
+    };
+
+    const validatedData = categorySchema.parse(rawData);
+
+    // Verificar que el nombre no exista en la organización
+    const { data: existingCategory } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("name", validatedData.name)
+      .eq("organization_id", profile.organization_id)
+      .single();
+
+    if (existingCategory) {
+      return {
+        error: "Ya existe una categoría con este nombre en tu organización",
+      };
+    }
+
+    // Insertar categoría
+    const { data, error } = await supabase
+      .from("categories")
+      .insert({
+        name: validatedData.name,
+        organization_id: profile.organization_id,
+        color: validatedData.color || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error al crear categoría:", error);
+      return {
+        error: error.message,
+      };
+    }
+
+    revalidatePath("/dashboard/inventory");
+    return {
+      success: true,
+      data,
+      message: "Categoría creada correctamente",
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const firstError = error.errors && error.errors.length > 0 
+        ? error.errors[0].message 
+        : "Error de validación";
+      return {
+        error: firstError,
+      };
+    }
+    console.error("Error inesperado en createCategory:", error);
+    return {
+      error: error instanceof Error ? error.message : "Error inesperado al crear categoría",
+    };
+  }
+}
+

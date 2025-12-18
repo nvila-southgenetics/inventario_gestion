@@ -1,0 +1,421 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import {
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Package,
+  Calendar,
+  User,
+  Building2,
+  Hash,
+  AlertTriangle,
+  FileText,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { registerMovement } from "@/actions/inventory";
+import { createClient } from "@/lib/supabase/client";
+import toast from "react-hot-toast";
+import type { Product, Supplier } from "@/types/database";
+
+interface MovementSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  products: Product[];
+  onSuccess?: () => void;
+}
+
+export function MovementSheet({
+  open,
+  onOpenChange,
+  products,
+  onSuccess,
+}: MovementSheetProps) {
+  const [movementType, setMovementType] = useState<"Entrada" | "Salida">(
+    "Entrada"
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+
+  // Form state
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [lotNumber, setLotNumber] = useState("");
+  const [expirationDate, setExpirationDate] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (open && movementType === "Entrada") {
+      loadSuppliers();
+    }
+  }, [open, movementType]);
+
+  async function loadSuppliers() {
+    setIsLoadingSuppliers(true);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setIsLoadingSuppliers(false);
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile) {
+      setIsLoadingSuppliers(false);
+      return;
+    }
+
+    const { data: suppliersData } = await supabase
+      .from("suppliers")
+      .select("*")
+      .eq("organization_id", profile.organization_id)
+      .order("name", { ascending: true });
+
+    setSuppliers(suppliersData || []);
+    setIsLoadingSuppliers(false);
+  }
+
+  function resetForm() {
+    setProductId("");
+    setQuantity("");
+    setLotNumber("");
+    setExpirationDate("");
+    setSupplierId("");
+    setRecipient("");
+    setNotes("");
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    const formData = new FormData();
+    formData.append("product_id", productId);
+    formData.append("type", movementType);
+    formData.append("quantity", quantity);
+    if (lotNumber) formData.append("lot_number", lotNumber);
+    if (expirationDate) formData.append("expiration_date", expirationDate);
+    if (supplierId) formData.append("supplier_id", supplierId);
+    if (recipient) formData.append("recipient", recipient);
+    if (notes) formData.append("notes", notes);
+
+    const result = await registerMovement(formData);
+
+    if (result?.error) {
+      toast.error(result.error);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (result?.success) {
+      toast.success(result.message || "Movimiento registrado correctamente");
+      resetForm();
+      setIsSubmitting(false);
+      onOpenChange(false);
+      onSuccess?.();
+    }
+  }
+
+  const selectedProduct = products.find((p) => p.id === productId);
+  const isLowStock =
+    selectedProduct &&
+    (selectedProduct.current_stock || selectedProduct.stock || 0) <=
+      (selectedProduct.min_stock || 0);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            {movementType === "Entrada" ? (
+              <>
+                <ArrowDownCircle className="h-5 w-5 text-teal-600" />
+                Registrar Entrada
+              </>
+            ) : (
+              <>
+                <ArrowUpCircle className="h-5 w-5 text-red-600" />
+                Registrar Salida
+              </>
+            )}
+          </SheetTitle>
+          <SheetDescription>
+            {movementType === "Entrada"
+              ? "Registra una entrada de productos al inventario"
+              : "Registra una salida de productos del inventario"}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-6 space-y-6">
+          {/* Toggle Entrada/Salida */}
+          <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+            <Button
+              type="button"
+              variant={movementType === "Entrada" ? "default" : "ghost"}
+              className={`flex-1 ${
+                movementType === "Entrada"
+                  ? "bg-teal-600 hover:bg-teal-700 text-white"
+                  : ""
+              }`}
+              onClick={() => {
+                setMovementType("Entrada");
+                resetForm();
+              }}
+            >
+              <ArrowDownCircle className="mr-2 h-4 w-4" />
+              Entrada
+            </Button>
+            <Button
+              type="button"
+              variant={movementType === "Salida" ? "default" : "ghost"}
+              className={`flex-1 ${
+                movementType === "Salida"
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : ""
+              }`}
+              onClick={() => {
+                setMovementType("Salida");
+                resetForm();
+              }}
+            >
+              <ArrowUpCircle className="mr-2 h-4 w-4" />
+              Salida
+            </Button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Producto */}
+            <div className="space-y-2">
+              <Label htmlFor="product">Producto *</Label>
+              <Select
+                value={productId}
+                onValueChange={setProductId}
+                required
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Seleccionar producto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4" />
+                        <div>
+                          <div className="font-medium">{product.name}</div>
+                          <div className="text-xs text-slate-500">
+                            SKU: {product.sku} | Stock:{" "}
+                            {product.current_stock || product.stock || 0}
+                          </div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isLowStock && movementType === "Salida" && (
+                <p className="text-sm text-orange-600 flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4" />
+                  Stock bajo. Verifica disponibilidad antes de registrar salida.
+                </p>
+              )}
+            </div>
+
+            {/* Cantidad */}
+            <div className="space-y-2">
+              <Label htmlFor="quantity">Cantidad *</Label>
+              <Input
+                id="quantity"
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                required
+                disabled={isSubmitting}
+                className="h-12"
+                placeholder="Ingresa la cantidad"
+              />
+            </div>
+
+            {/* Campos condicionales para Entrada */}
+            {movementType === "Entrada" && (
+              <>
+                {/* Proveedor */}
+                <div className="space-y-2">
+                  <Label htmlFor="supplier">Proveedor</Label>
+                  <Select
+                    value={supplierId}
+                    onValueChange={setSupplierId}
+                    disabled={isSubmitting || isLoadingSuppliers}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Seleccionar proveedor (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4" />
+                            {supplier.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Número de Lote */}
+                <div className="space-y-2">
+                  <Label htmlFor="lot_number">Número de Lote</Label>
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input
+                      id="lot_number"
+                      value={lotNumber}
+                      onChange={(e) => setLotNumber(e.target.value)}
+                      disabled={isSubmitting}
+                      className="pl-10 h-12"
+                      placeholder="Ej: LOT-2025-001"
+                    />
+                  </div>
+                </div>
+
+                {/* Fecha de Vencimiento */}
+                <div className="space-y-2">
+                  <Label htmlFor="expiration_date">Fecha de Vencimiento</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input
+                      id="expiration_date"
+                      type="date"
+                      value={expirationDate}
+                      onChange={(e) => setExpirationDate(e.target.value)}
+                      disabled={isSubmitting}
+                      className="pl-10 h-12"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Campos condicionales para Salida */}
+            {movementType === "Salida" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="recipient">Destinatario / Razón</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input
+                      id="recipient"
+                      value={recipient}
+                      onChange={(e) => setRecipient(e.target.value)}
+                      disabled={isSubmitting}
+                      className="pl-10 h-12"
+                      placeholder="Ej: Clínica XYZ, Dr. Pérez, Paciente ABC"
+                    />
+                  </div>
+                </div>
+                {/* Comentarios para Salida - Recomendado */}
+                <div className="space-y-2">
+                  <Label htmlFor="notes">
+                    Comentarios / Notas{" "}
+                    <span className="text-xs text-slate-500">(Recomendado)</span>
+                  </Label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                    <Textarea
+                      id="notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      disabled={isSubmitting}
+                      className="pl-10 min-h-[80px]"
+                      placeholder="Motivo de la salida, detalles del uso, observaciones..."
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Comentarios para Entrada - Opcional */}
+            {movementType === "Entrada" && (
+              <div className="space-y-2">
+                <Label htmlFor="notes">Comentarios / Notas</Label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                  <Textarea
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    disabled={isSubmitting}
+                    className="pl-10 min-h-[80px]"
+                    placeholder="Observaciones adicionales sobre la entrada..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Botones */}
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className={`flex-1 ${
+                  movementType === "Entrada"
+                    ? "bg-teal-600 hover:bg-teal-700"
+                    : "bg-red-600 hover:bg-red-700"
+                } text-white`}
+                disabled={isSubmitting || !productId || !quantity}
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="mr-2">Procesando...</span>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  </>
+                ) : (
+                  "Confirmar Movimiento"
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
