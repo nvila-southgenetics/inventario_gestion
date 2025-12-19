@@ -335,7 +335,7 @@ export default function InventoryPage() {
         onOpenChange={setIsProductSheetOpen}
         onSuccess={() => {
           loadData();
-          setIsProductSheetOpen(false);
+          // No cerrar aquí, el componente ya lo hace
         }}
       />
     </div>

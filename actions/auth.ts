@@ -31,7 +31,7 @@ export async function login(formData: FormData) {
 
   if (data.user) {
     revalidatePath("/", "layout");
-    redirect("/");
+    redirect("/dashboard");
   }
 }
 

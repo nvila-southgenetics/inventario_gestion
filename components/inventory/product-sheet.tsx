@@ -62,6 +62,7 @@ export function ProductSheet({
   useEffect(() => {
     if (open) {
       loadCategories();
+      resetForm(); // Resetear el formulario cada vez que se abre el Sheet
     }
   }, [open]);
 
@@ -104,6 +105,7 @@ export function ProductSheet({
     setDescription("");
     setMinStock("0");
     setCategoryId("");
+    setIsSubmitting(false); // Asegurar que se resetee el estado de envío
   }
 
   async function handleCreateCategory(e: React.FormEvent<HTMLFormElement>) {
@@ -158,9 +160,11 @@ export function ProductSheet({
     if (result?.success) {
       toast.success(result.message || "Producto creado correctamente");
       resetForm();
-      setIsSubmitting(false);
-      onOpenChange(false);
       onSuccess?.();
+      // Cerrar el Sheet después de un pequeño delay para asegurar que todo se procese
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 100);
     }
   }
 
