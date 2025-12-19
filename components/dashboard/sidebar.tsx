@@ -23,7 +23,12 @@ interface SidebarProps {
   isMobile?: boolean;
 }
 
-const navigationItems = [
+const navigationItems: Array<{
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+}> = [
   {
     name: "Dashboard",
     href: "/dashboard",
@@ -48,6 +53,7 @@ const navigationItems = [
     name: "Usuarios",
     href: "/dashboard/users",
     icon: Users,
+    adminOnly: false, // Visible para todos por ahora
   },
   {
     name: "Configuración",

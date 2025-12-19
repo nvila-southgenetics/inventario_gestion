@@ -43,7 +43,6 @@ export async function getLowStockAlerts(): Promise<LowStockAlert[]> {
     .from("products")
     .select("*")
     .eq("organization_id", profile.organization_id)
-    .lte("current_stock", supabase.raw("min_stock"))
     .order("current_stock", { ascending: true });
 
   if (error) {
@@ -51,7 +50,12 @@ export async function getLowStockAlerts(): Promise<LowStockAlert[]> {
     return [];
   }
 
-  return (products || []).map((product) => ({
+  // Filtrar productos con stock bajo en el cliente
+  const lowStockProducts = (products || []).filter(
+    (product) => (product.current_stock || 0) <= (product.min_stock || 0)
+  );
+
+  return lowStockProducts.map((product) => ({
     ...product,
     alert_level: product.current_stock === 0 ? "critical" : "warning",
   }));
@@ -145,12 +149,15 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     .select("*", { count: "exact", head: true })
     .eq("organization_id", profile.organization_id);
 
-  // Productos con stock bajo
-  const { count: lowStockCount } = await supabase
+  // Productos con stock bajo (obtener todos y filtrar en cliente)
+  const { data: allProducts } = await supabase
     .from("products")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", profile.organization_id)
-    .lte("current_stock", supabase.raw("min_stock"));
+    .select("id, current_stock, min_stock")
+    .eq("organization_id", profile.organization_id);
+  
+  const lowStockCount = (allProducts || []).filter(
+    (product) => (product.current_stock || 0) <= (product.min_stock || 0)
+  ).length;
 
   // Movimientos de hoy
   const today = new Date();

@@ -21,26 +21,19 @@ export async function GET(request: NextRequest) {
 
     // Verificar el token OTP
     // Intentar primero sin email (para invite y recovery)
-    let verifyOptions: {
-      type: string;
-      token_hash: string;
-      email?: string;
-    } = {
-      type: type as any,
+    let { data, error } = await supabase.auth.verifyOtp({
+      type: type as "email" | "invite" | "recovery" | "magiclink",
       token_hash: token_hash,
-    };
-
-    // Si hay email disponible, incluirlo (algunos tipos lo requieren)
-    if (email) {
-      verifyOptions.email = email;
-    }
-
-    let { data, error } = await supabase.auth.verifyOtp(verifyOptions);
+      ...(email && { email }),
+    });
 
     // Si falla sin email y tenemos email disponible, intentar con email
-    if (error && email && !verifyOptions.email) {
-      verifyOptions.email = email;
-      const retry = await supabase.auth.verifyOtp(verifyOptions);
+    if (error && email) {
+      const retry = await supabase.auth.verifyOtp({
+        type: type as "email" | "invite" | "recovery" | "magiclink",
+        token_hash: token_hash,
+        email: email,
+      });
       error = retry.error;
       data = retry.data;
     }

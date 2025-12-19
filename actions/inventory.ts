@@ -27,13 +27,12 @@ const productSchema = z.object({
 const movementSchema = z.object({
   product_id: z.string().uuid("ID de producto inválido"),
   type: z.enum(["Entrada", "Salida"], {
-    errorMap: () => ({ message: "El tipo debe ser 'Entrada' o 'Salida'" }),
+    message: "El tipo debe ser 'Entrada' o 'Salida'",
   }),
   // Usa coerce para convertir el string del input a número automáticamente
   quantity: z.coerce
     .number({
-      required_error: "La cantidad es requerida",
-      invalid_type_error: "La cantidad debe ser un número",
+      message: "La cantidad debe ser un número",
     })
     .int("La cantidad debe ser un número entero")
     .positive("La cantidad debe ser mayor a 0")
@@ -145,8 +144,8 @@ export async function createSupplier(formData: FormData) {
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const firstError = error.errors && error.errors.length > 0 
-        ? error.errors[0].message 
+      const firstError = error.issues && error.issues.length > 0 
+        ? error.issues[0].message 
         : "Error de validación";
       return {
         error: firstError,
@@ -238,8 +237,8 @@ export async function createProduct(formData: FormData) {
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const firstError = error.errors && error.errors.length > 0 
-        ? error.errors[0].message 
+      const firstError = error.issues && error.issues.length > 0 
+        ? error.issues[0].message 
         : "Error de validación";
       return {
         error: firstError,
@@ -371,19 +370,19 @@ export async function registerMovement(formData: FormData) {
       // Mejor debugging: mostrar todos los errores en desarrollo
       if (process.env.NODE_ENV === "development") {
         console.error("[registerMovement] Errores de validación:", {
-          errors: error.errors,
+          errors: error.issues,
           issues: error.issues,
         });
       }
 
       // Obtener el primer error o un mensaje genérico
-      const firstError = error.errors && error.errors.length > 0 
-        ? error.errors[0].message 
+      const firstError = error.issues && error.issues.length > 0 
+        ? error.issues[0].message 
         : "Error de validación";
       
       // Si hay múltiples errores, combinarlos en desarrollo
-      const errorMessage = process.env.NODE_ENV === "development" && error.errors.length > 1
-        ? `${firstError} (y ${error.errors.length - 1} error(es) más)`
+      const errorMessage = process.env.NODE_ENV === "development" && error.issues.length > 1
+        ? `${firstError} (y ${error.issues.length - 1} error(es) más)`
         : firstError;
 
       return {
@@ -480,8 +479,8 @@ export async function createCategory(formData: FormData) {
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const firstError = error.errors && error.errors.length > 0 
-        ? error.errors[0].message 
+      const firstError = error.issues && error.issues.length > 0 
+        ? error.issues[0].message 
         : "Error de validación";
       return {
         error: firstError,
