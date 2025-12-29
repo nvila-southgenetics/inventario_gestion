@@ -28,21 +28,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { createProduct, createCategory } from "@/actions/inventory";
+import { createProduct, updateProduct, createCategory } from "@/actions/inventory";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
-import type { Category } from "@/types/database";
+import type { Category, Product } from "@/types/database";
 
 interface ProductSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  product?: Product | null;
 }
 
 export function ProductSheet({
   open,
   onOpenChange,
   onSuccess,
+  product,
 }: ProductSheetProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -62,9 +64,18 @@ export function ProductSheet({
   useEffect(() => {
     if (open) {
       loadCategories();
-      resetForm(); // Resetear el formulario cada vez que se abre el Sheet
+      if (product) {
+        // Cargar datos del producto para editar
+        setName(product.name);
+        setSku(product.sku);
+        setDescription(product.description || "");
+        setMinStock(product.min_stock.toString());
+        setCategoryId(product.category_id.toString());
+      } else {
+        resetForm(); // Resetear el formulario si es nuevo producto
+      }
     }
-  }, [open]);
+  }, [open, product]);
 
   async function loadCategories() {
     setIsLoadingCategories(true);
@@ -149,7 +160,9 @@ export function ProductSheet({
     formData.append("min_stock", minStock);
     formData.append("category_id", categoryId);
 
-    const result = await createProduct(formData);
+    const result = product
+      ? await updateProduct(product.id, formData)
+      : await createProduct(formData);
 
     if (result?.error) {
       toast.error(result.error);
@@ -158,7 +171,7 @@ export function ProductSheet({
     }
 
     if (result?.success) {
-      toast.success(result.message || "Producto creado correctamente");
+      toast.success(result.message || (product ? "Producto actualizado correctamente" : "Producto creado correctamente"));
       resetForm();
       onSuccess?.();
       // Cerrar el Sheet después de un pequeño delay para asegurar que todo se procese
@@ -179,10 +192,12 @@ export function ProductSheet({
             <div className="p-2 rounded-lg bg-teal-500/20">
               <Package className="h-5 w-5 text-white" />
             </div>
-            Nuevo Producto
+            {product ? "Editar Producto" : "Nuevo Producto"}
           </SheetTitle>
           <SheetDescription className="text-teal-50/90">
-            Completa la información para agregar un nuevo producto al inventario
+            {product
+              ? "Modifica la información del producto"
+              : "Completa la información para agregar un nuevo producto al inventario"}
           </SheetDescription>
         </SheetHeader>
 
@@ -215,13 +230,15 @@ export function ProductSheet({
                   value={sku}
                   onChange={(e) => setSku(e.target.value.toUpperCase())}
                   required
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !!product}
                   className="pl-10 h-12 bg-white/95 border-white/20 focus:bg-white focus:border-white/40 text-slate-900 placeholder:text-slate-400"
                   placeholder="Ej: KIT-BRCA-001"
                 />
               </div>
               <p className="text-xs text-teal-50/80">
-                El SKU debe ser único en tu organización
+                {product
+                  ? "El SKU no se puede modificar después de crear el producto"
+                  : "El SKU debe ser único en tu organización"}
               </p>
             </div>
 
@@ -341,7 +358,7 @@ export function ProductSheet({
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
                   </>
                 ) : (
-                  "Crear Producto"
+                  product ? "Actualizar Producto" : "Crear Producto"
                 )}
               </Button>
             </div>

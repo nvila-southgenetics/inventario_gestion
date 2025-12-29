@@ -6,19 +6,26 @@ import {
   Search,
   Package,
   Plus,
-  AlertTriangle,
-  CheckCircle2,
   History,
-  Filter,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { deleteProduct } from "@/actions/inventory";
 import type { Product, Category } from "@/types/database";
 
 type ProductWithCategory = Product & {
@@ -36,6 +43,10 @@ export default function InventoryPage() {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [isMovementSheetOpen, setIsMovementSheetOpen] = useState(false);
   const [isProductSheetOpen, setIsProductSheetOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<ProductWithCategory | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<ProductWithCategory | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -136,6 +147,27 @@ export default function InventoryPage() {
     return category?.name || "Sin categoría";
   };
 
+  async function handleDeleteProduct() {
+    if (!productToDelete) return;
+
+    setIsDeleting(true);
+    const result = await deleteProduct(productToDelete.id);
+
+    if (result?.error) {
+      toast.error(result.error);
+      setIsDeleting(false);
+      return;
+    }
+
+    if (result?.success) {
+      toast.success(result.message || "Producto eliminado correctamente");
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
+      loadData();
+    }
+    setIsDeleting(false);
+  }
+
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
       {/* Header */}
@@ -151,14 +183,24 @@ export default function InventoryPage() {
               Gestiona tus productos y stock
             </p>
           </div>
-          <Button
-            onClick={() => setIsMovementSheetOpen(true)}
-            className="bg-teal-600 hover:bg-teal-700 text-white"
-            size="lg"
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            Registrar Movimiento
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setIsProductSheetOpen(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              size="lg"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Agregar Producto
+            </Button>
+            <Button
+              onClick={() => setIsMovementSheetOpen(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              size="lg"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Registrar Movimiento
+            </Button>
+          </div>
         </div>
 
         {/* Buscador */}
@@ -223,89 +265,98 @@ export default function InventoryPage() {
           )}
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-2">
           {filteredProducts.map((product, index) => {
             const stockStatus = getStockStatus(product);
             return (
               <motion.div
                 key={product.id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
+                transition={{ delay: index * 0.03 }}
               >
-                <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-4">
-                      {/* Icono */}
-                      <div className="p-3 rounded-xl bg-teal-50 flex-shrink-0">
-                        <Package className="h-6 w-6 text-teal-600" />
-                      </div>
-
-                      {/* Información */}
+                <Card className="border-slate-200 hover:border-teal-300 transition-colors">
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-slate-900 text-lg truncate">
-                              {product.name}
-                            </h3>
-                            <p className="text-sm text-slate-500">
-                              SKU: {product.sku}
-                            </p>
-                          </div>
-                          <Badge
-                            variant={stockStatus.variant}
-                            className={
-                              stockStatus.status === "low"
-                                ? "animate-pulse"
-                                : ""
-                            }
+                        <div className="flex items-center gap-3">
+                          <h3 className="font-medium text-slate-900 truncate">
+                            {product.name}
+                          </h3>
+                          <span className="text-xs text-slate-400">
+                            {product.sku}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span
+                            className={`text-sm font-medium ${
+                              stockStatus.status === "empty"
+                                ? "text-red-600"
+                                : stockStatus.status === "low"
+                                ? "text-orange-600"
+                                : "text-slate-600"
+                            }`}
                           >
-                            {stockStatus.label}
-                          </Badge>
-                        </div>
-
-                        <div className="flex items-center gap-4 mt-3">
-                          <div>
-                            <span className="text-sm text-slate-600">Stock: </span>
-                            <span
-                              className={`font-bold text-lg ${
-                                stockStatus.status === "empty"
-                                  ? "text-red-600"
-                                  : stockStatus.status === "low"
-                                  ? "text-orange-600"
-                                  : "text-teal-600"
-                              }`}
-                            >
-                              {product.current_stock || product.stock || 0}
+                            {product.current_stock || product.stock || 0}
+                          </span>
+                          {product.min_stock > 0 && (
+                            <span className="text-xs text-slate-400">
+                              mín. {product.min_stock}
                             </span>
-                            {product.min_stock > 0 && (
-                              <span className="text-sm text-slate-500 ml-1">
-                                / Mín: {product.min_stock}
-                              </span>
-                            )}
-                          </div>
-                          <Badge variant="outline" className="text-xs">
+                          )}
+                          <span className="text-xs text-slate-400">
                             {getCategoryName(product.category_id)}
-                          </Badge>
+                          </span>
                         </div>
-
-                        {product.description && (
-                          <p className="text-sm text-slate-600 mt-2 line-clamp-2">
-                            {product.description}
-                          </p>
-                        )}
-
-                        <div className="flex gap-2 mt-3">
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {stockStatus.status === "low" || stockStatus.status === "empty" ? (
+                          <div
+                            className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                              stockStatus.status === "empty"
+                                ? "bg-red-500"
+                                : "bg-orange-500 animate-pulse"
+                            }`}
+                          />
+                        ) : null}
+                        <div className="flex items-center gap-1 ml-2">
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            className="text-xs"
-                            onClick={() => {
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               router.push(`/dashboard/history?product_id=${product.id}`);
                             }}
+                            title="Ver historial"
                           >
-                            <History className="mr-1 h-3 w-3" />
-                            Ver Historial
+                            <History className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProduct(product);
+                              setIsProductSheetOpen(true);
+                            }}
+                            title="Editar producto"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProductToDelete(product);
+                              setDeleteDialogOpen(true);
+                            }}
+                            title="Eliminar producto"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -329,15 +380,53 @@ export default function InventoryPage() {
         }}
       />
 
-      {/* Sheet de Crear Producto */}
+      {/* Sheet de Crear/Editar Producto */}
       <ProductSheet
         open={isProductSheetOpen}
-        onOpenChange={setIsProductSheetOpen}
+        onOpenChange={(open) => {
+          setIsProductSheetOpen(open);
+          if (!open) {
+            setEditingProduct(null);
+          }
+        }}
+        product={editingProduct}
         onSuccess={() => {
           loadData();
-          // No cerrar aquí, el componente ya lo hace
+          setEditingProduct(null);
         }}
       />
+
+      {/* Dialog de Confirmación para Eliminar */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Eliminar producto?</DialogTitle>
+            <DialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente el producto{" "}
+              <strong>{productToDelete?.name}</strong> y todos sus datos asociados.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setProductToDelete(null);
+              }}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteProduct}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

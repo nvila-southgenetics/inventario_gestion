@@ -405,6 +405,185 @@ export async function registerMovement(formData: FormData) {
   }
 }
 
+export async function updateProduct(productId: string, formData: FormData) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        error: "No autenticado",
+      };
+    }
+
+    // Obtener organization_id del usuario
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        error: "Error al obtener información del usuario",
+      };
+    }
+
+    // Validar datos
+    const rawData = {
+      name: formData.get("name") as string,
+      sku: formData.get("sku") as string,
+      description: formData.get("description") as string,
+      min_stock: Number(formData.get("min_stock")),
+      category_id: Number(formData.get("category_id")),
+    };
+
+    const validatedData = productSchema.parse(rawData);
+
+    // Verificar que el producto pertenezca a la organización
+    const { data: existingProduct } = await supabase
+      .from("products")
+      .select("id, sku")
+      .eq("id", productId)
+      .eq("organization_id", profile.organization_id)
+      .single();
+
+    if (!existingProduct) {
+      return {
+        error: "Producto no encontrado",
+      };
+    }
+
+    // Si el SKU cambió, verificar que no exista otro producto con ese SKU
+    if (existingProduct.sku !== validatedData.sku) {
+      const { data: duplicateProduct } = await supabase
+        .from("products")
+        .select("id")
+        .eq("sku", validatedData.sku)
+        .eq("organization_id", profile.organization_id)
+        .neq("id", productId)
+        .single();
+
+      if (duplicateProduct) {
+        return {
+          error: "Ya existe otro producto con este SKU en tu organización",
+        };
+      }
+    }
+
+    // Actualizar producto
+    const { data, error } = await supabase
+      .from("products")
+      .update({
+        name: validatedData.name,
+        sku: validatedData.sku,
+        description: validatedData.description || null,
+        min_stock: validatedData.min_stock,
+        category_id: validatedData.category_id,
+      })
+      .eq("id", productId)
+      .eq("organization_id", profile.organization_id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error al actualizar producto:", error);
+      return {
+        error: error.message,
+      };
+    }
+
+    revalidatePath("/dashboard/inventory");
+    return {
+      success: true,
+      data,
+      message: "Producto actualizado correctamente",
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const firstError = error.issues && error.issues.length > 0 
+        ? error.issues[0].message 
+        : "Error de validación";
+      return {
+        error: firstError,
+      };
+    }
+    console.error("Error inesperado en updateProduct:", error);
+    return {
+      error: error instanceof Error ? error.message : "Error inesperado al actualizar producto",
+    };
+  }
+}
+
+export async function deleteProduct(productId: string) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        error: "No autenticado",
+      };
+    }
+
+    // Obtener organization_id del usuario
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        error: "Error al obtener información del usuario",
+      };
+    }
+
+    // Verificar que el producto pertenezca a la organización
+    const { data: existingProduct } = await supabase
+      .from("products")
+      .select("id")
+      .eq("id", productId)
+      .eq("organization_id", profile.organization_id)
+      .single();
+
+    if (!existingProduct) {
+      return {
+        error: "Producto no encontrado",
+      };
+    }
+
+    // Eliminar producto
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", productId)
+      .eq("organization_id", profile.organization_id);
+
+    if (error) {
+      console.error("Error al eliminar producto:", error);
+      return {
+        error: error.message,
+      };
+    }
+
+    revalidatePath("/dashboard/inventory");
+    return {
+      success: true,
+      message: "Producto eliminado correctamente",
+    };
+  } catch (error) {
+    console.error("Error inesperado en deleteProduct:", error);
+    return {
+      error: error instanceof Error ? error.message : "Error inesperado al eliminar producto",
+    };
+  }
+}
+
 export async function createCategory(formData: FormData) {
   try {
     const supabase = await createClient();
