@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Package, Plus, Settings } from "lucide-react";
+import { Home, Package, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
@@ -21,11 +21,6 @@ const navigationItems = [
     name: "Acción",
     href: "/accion",
     icon: Plus,
-  },
-  {
-    name: "Configuración",
-    href: "/configuracion",
-    icon: Settings,
   },
 ];
 

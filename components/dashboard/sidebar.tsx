@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Package,
   Users,
-  Settings,
   LogOut,
   X,
   Building2,
@@ -54,11 +53,6 @@ const navigationItems: Array<{
     href: "/dashboard/users",
     icon: Users,
     adminOnly: false, // Visible para todos por ahora
-  },
-  {
-    name: "Configuración",
-    href: "/configuracion",
-    icon: Settings,
   },
 ];
 
