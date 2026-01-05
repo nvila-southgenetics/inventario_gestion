@@ -51,6 +51,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
+  // Si está autenticado y está en la ruta raíz, redirigir a dashboard
+  if (user && request.nextUrl.pathname === "/") {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
   return response;
 }
 
