@@ -43,10 +43,10 @@ export default function UsersPage() {
       return;
     }
 
-    // Obtener el organization_id y el rol del usuario actual
+    // Obtener el organization_id, rol, email y country_code del usuario actual
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id, role, email")
+      .select("organization_id, role, email, country_code")
       .eq("id", user.id)
       .single();
 
