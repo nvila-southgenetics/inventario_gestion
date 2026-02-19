@@ -69,7 +69,7 @@ export default function SuppliersPage() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -78,10 +78,13 @@ export default function SuppliersPage() {
       return;
     }
 
+    const countryCode = profile.country_code || "MX";
+
     const { data: suppliersData, error } = await supabase
       .from("suppliers")
       .select("*")
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", countryCode)
       .order("name", { ascending: true });
 
     if (error) {

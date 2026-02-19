@@ -95,10 +95,10 @@ export async function createSupplier(formData: FormData) {
       };
     }
 
-    // Obtener organization_id del usuario
+    // Obtener organization_id y country_code del usuario
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -123,6 +123,7 @@ export async function createSupplier(formData: FormData) {
       .insert({
         ...validatedData,
         organization_id: profile.organization_id,
+        country_code: profile.country_code || "MX",
         contact_email: validatedData.contact_email || null,
         phone: validatedData.phone || null,
       })
@@ -171,10 +172,10 @@ export async function createProduct(formData: FormData) {
       };
     }
 
-    // Obtener organization_id del usuario
+    // Obtener organization_id y country_code del usuario
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -195,17 +196,18 @@ export async function createProduct(formData: FormData) {
 
     const validatedData = productSchema.parse(rawData);
 
-    // Verificar que el SKU no exista en la organización
+    // Verificar que el SKU no exista en la organización y país
     const { data: existingProduct } = await supabase
       .from("products")
       .select("id")
       .eq("sku", validatedData.sku)
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", profile.country_code || "MX")
       .single();
 
     if (existingProduct) {
       return {
-        error: "Ya existe un producto con este SKU en tu organización",
+        error: "Ya existe un producto con este SKU en tu organización y país",
       };
     }
 
@@ -215,6 +217,7 @@ export async function createProduct(formData: FormData) {
       .insert({
         ...validatedData,
         organization_id: profile.organization_id,
+        country_code: profile.country_code || "MX",
         current_stock: 0,
         stock: 0, // Mantener compatibilidad
         description: validatedData.description || null,
@@ -264,10 +267,10 @@ export async function registerMovement(formData: FormData) {
       };
     }
 
-    // Obtener organization_id del usuario
+    // Obtener organization_id y country_code del usuario
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -341,6 +344,7 @@ export async function registerMovement(formData: FormData) {
       .insert({
         ...validatedData,
         organization_id: profile.organization_id,
+        country_code: profile.country_code || "MX",
         created_by: user.id,
         supplier_id: validatedData.supplier_id || null,
         recipient: validatedData.recipient || null,
@@ -418,10 +422,10 @@ export async function updateProduct(productId: string, formData: FormData) {
       };
     }
 
-    // Obtener organization_id del usuario
+    // Obtener organization_id y country_code del usuario
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -442,12 +446,13 @@ export async function updateProduct(productId: string, formData: FormData) {
 
     const validatedData = productSchema.parse(rawData);
 
-    // Verificar que el producto pertenezca a la organización
+    // Verificar que el producto pertenezca a la organización y país
     const { data: existingProduct } = await supabase
       .from("products")
       .select("id, sku")
       .eq("id", productId)
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", profile.country_code || "MX")
       .single();
 
     if (!existingProduct) {
@@ -456,13 +461,14 @@ export async function updateProduct(productId: string, formData: FormData) {
       };
     }
 
-    // Si el SKU cambió, verificar que no exista otro producto con ese SKU
+    // Si el SKU cambió, verificar que no exista otro producto con ese SKU en el mismo país
     if (existingProduct.sku !== validatedData.sku) {
       const { data: duplicateProduct } = await supabase
         .from("products")
         .select("id")
         .eq("sku", validatedData.sku)
         .eq("organization_id", profile.organization_id)
+        .eq("country_code", profile.country_code || "MX")
         .neq("id", productId)
         .single();
 
@@ -485,6 +491,7 @@ export async function updateProduct(productId: string, formData: FormData) {
       })
       .eq("id", productId)
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", profile.country_code || "MX")
       .select()
       .single();
 
@@ -530,10 +537,10 @@ export async function deleteProduct(productId: string) {
       };
     }
 
-    // Obtener organization_id del usuario
+    // Obtener organization_id y country_code del usuario
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -543,12 +550,13 @@ export async function deleteProduct(productId: string) {
       };
     }
 
-    // Verificar que el producto pertenezca a la organización
+    // Verificar que el producto pertenezca a la organización y país
     const { data: existingProduct } = await supabase
       .from("products")
       .select("id")
       .eq("id", productId)
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", profile.country_code || "MX")
       .single();
 
     if (!existingProduct) {
@@ -562,7 +570,8 @@ export async function deleteProduct(productId: string) {
       .from("products")
       .delete()
       .eq("id", productId)
-      .eq("organization_id", profile.organization_id);
+      .eq("organization_id", profile.organization_id)
+      .eq("country_code", profile.country_code || "MX");
 
     if (error) {
       console.error("Error al eliminar producto:", error);
@@ -597,10 +606,10 @@ export async function createCategory(formData: FormData) {
       };
     }
 
-    // Obtener organization_id del usuario
+    // Obtener organization_id y country_code del usuario
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -618,17 +627,18 @@ export async function createCategory(formData: FormData) {
 
     const validatedData = categorySchema.parse(rawData);
 
-    // Verificar que el nombre no exista en la organización
+    // Verificar que el nombre no exista en la organización y país
     const { data: existingCategory } = await supabase
       .from("categories")
       .select("id")
       .eq("name", validatedData.name)
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", profile.country_code || "MX")
       .single();
 
     if (existingCategory) {
       return {
-        error: "Ya existe una categoría con este nombre en tu organización",
+        error: "Ya existe una categoría con este nombre en tu organización y país",
       };
     }
 
@@ -638,6 +648,7 @@ export async function createCategory(formData: FormData) {
       .insert({
         name: validatedData.name,
         organization_id: profile.organization_id,
+        country_code: profile.country_code || "MX",
         color: validatedData.color || null,
       })
       .select()

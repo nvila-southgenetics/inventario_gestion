@@ -64,10 +64,10 @@ export default function InventoryPage() {
       return;
     }
 
-    // Obtener organization_id
+    // Obtener organization_id y country_code
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -78,11 +78,14 @@ export default function InventoryPage() {
       return;
     }
 
+    const countryCode = profile.country_code || "MX";
+
     // Cargar productos
     const { data: productsData, error: productsError } = await supabase
       .from("products")
       .select("*")
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", countryCode)
       .order("name", { ascending: true });
 
     if (productsError) {
@@ -97,6 +100,7 @@ export default function InventoryPage() {
       .from("categories")
       .select("*")
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", countryCode)
       .order("name", { ascending: true });
 
     if (categoriesError) {

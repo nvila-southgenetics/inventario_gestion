@@ -5,6 +5,7 @@ export interface Profile {
   email: string;
   organization_id: string;
   role: UserRole;
+  country_code: string;
   created_at: string;
 }
 
@@ -13,6 +14,7 @@ export interface Category {
   name: string;
   color: string | null;
   organization_id: string;
+  country_code: string;
   created_at: string;
 }
 
@@ -36,6 +38,7 @@ export interface Product {
   description: string | null;
   category_id: number;
   organization_id: string;
+  country_code: string;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +54,7 @@ export interface Movement {
   recipient: string | null;
   notes: string | null;
   organization_id: string;
+  country_code: string;
   created_at: string;
   created_by: string | null;
 }

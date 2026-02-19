@@ -59,7 +59,7 @@ export default function DashboardPage() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -68,6 +68,8 @@ export default function DashboardPage() {
       return;
     }
 
+    const countryCode = profile.country_code || "MX";
+
     // Cargar estadísticas
     const [productsResult, lowStockResult, movementsResult, topSupplierResult] =
       await Promise.all([
@@ -75,12 +77,14 @@ export default function DashboardPage() {
         supabase
           .from("products")
           .select("*", { count: "exact", head: true })
-          .eq("organization_id", profile.organization_id),
+          .eq("organization_id", profile.organization_id)
+          .eq("country_code", countryCode),
             // Productos con stock bajo (filtramos en el cliente por ahora)
         supabase
           .from("products")
           .select("*")
           .eq("organization_id", profile.organization_id)
+          .eq("country_code", countryCode)
           .order("current_stock", { ascending: true }),
         // Movimientos de hoy
         (async () => {
@@ -90,6 +94,7 @@ export default function DashboardPage() {
             .from("movements")
             .select("*", { count: "exact", head: true })
             .eq("organization_id", profile.organization_id)
+            .eq("country_code", countryCode)
             .gte("created_at", today.toISOString());
         })(),
         // Proveedor top
@@ -103,6 +108,7 @@ export default function DashboardPage() {
       .from("movements")
       .select("*")
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", countryCode)
       .order("created_at", { ascending: false })
       .limit(5);
 

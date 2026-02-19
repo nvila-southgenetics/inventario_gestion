@@ -31,7 +31,7 @@ export async function getLowStockAlerts(): Promise<LowStockAlert[]> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("organization_id, country_code")
     .eq("id", user.id)
     .single();
 
@@ -39,10 +39,13 @@ export async function getLowStockAlerts(): Promise<LowStockAlert[]> {
     return [];
   }
 
+  const countryCode = profile.country_code || "MX";
+
   const { data: products, error } = await supabase
     .from("products")
     .select("*")
     .eq("organization_id", profile.organization_id)
+    .eq("country_code", countryCode)
     .order("current_stock", { ascending: true });
 
   if (error) {
@@ -73,7 +76,7 @@ export async function getRecentActivity(): Promise<RecentActivity[]> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("organization_id, country_code")
     .eq("id", user.id)
     .single();
 
@@ -81,11 +84,14 @@ export async function getRecentActivity(): Promise<RecentActivity[]> {
     return [];
   }
 
+  const countryCode = profile.country_code || "MX";
+
   // Obtener últimos 5 movimientos
   const { data: movements, error } = await supabase
     .from("movements")
     .select("*")
     .eq("organization_id", profile.organization_id)
+    .eq("country_code", countryCode)
     .order("created_at", { ascending: false })
     .limit(5);
 
@@ -130,7 +136,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("organization_id, country_code")
     .eq("id", user.id)
     .single();
 
@@ -143,17 +149,21 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     };
   }
 
+  const countryCode = profile.country_code || "MX";
+
   // Total de productos
   const { count: totalProducts } = await supabase
     .from("products")
     .select("*", { count: "exact", head: true })
-    .eq("organization_id", profile.organization_id);
+    .eq("organization_id", profile.organization_id)
+    .eq("country_code", countryCode);
 
   // Productos con stock bajo (obtener todos y filtrar en cliente)
   const { data: allProducts } = await supabase
     .from("products")
     .select("id, current_stock, min_stock")
-    .eq("organization_id", profile.organization_id);
+    .eq("organization_id", profile.organization_id)
+    .eq("country_code", countryCode);
   
   const lowStockCount = (allProducts || []).filter(
     (product) => (product.current_stock || 0) <= (product.min_stock || 0)
@@ -166,6 +176,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     .from("movements")
     .select("*", { count: "exact", head: true })
     .eq("organization_id", profile.organization_id)
+    .eq("country_code", countryCode)
     .gte("created_at", today.toISOString());
 
   // Proveedor top usando la función RPC

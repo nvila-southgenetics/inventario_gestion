@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/actions/auth";
 import { createClient } from "@/lib/supabase/client";
+import { CountrySelector } from "./country-selector";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -163,6 +164,9 @@ export function Sidebar({ onClose, isMobile = false }: SidebarProps) {
                 </p>
                 <p className="text-xs text-slate-500 truncate">{userEmail}</p>
               </div>
+            </div>
+            <div className="mb-3">
+              <CountrySelector />
             </div>
             <form action={signOut}>
               <Button

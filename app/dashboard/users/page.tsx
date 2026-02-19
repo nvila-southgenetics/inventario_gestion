@@ -25,6 +25,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [userRole, setUserRole] = useState<string>("VIEWER");
+  const [isMultiCountry, setIsMultiCountry] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -45,7 +46,7 @@ export default function UsersPage() {
     // Obtener el organization_id y el rol del usuario actual
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id, role")
+      .select("organization_id, role, email")
       .eq("id", user.id)
       .single();
 
@@ -58,12 +59,18 @@ export default function UsersPage() {
 
     // Guardar el rol del usuario
     setUserRole(profile.role || "VIEWER");
+    
+    // Verificar si es usuario multi-país
+    setIsMultiCountry(profile.email === "nvila@southgenetics.com");
 
-    // Obtener TODOS los usuarios de la misma organización
+    // Obtener usuarios de la misma organización y país
+    // Si es usuario multi-país, mostrar solo usuarios del país seleccionado
+    const countryCode = profile.country_code || "MX";
     const { data: orgUsers, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", countryCode)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -169,6 +176,20 @@ export default function UsersPage() {
                   </Select>
                 </div>
               </div>
+              {isMultiCountry && (
+                <div className="space-y-2">
+                  <Label htmlFor="country_code">País</Label>
+                  <Select name="country_code" required disabled={isLoading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar país" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MX">🇲🇽 México</SelectItem>
+                      <SelectItem value="UY">🇺🇾 Uruguay</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button
                 type="submit"
                 className="w-full md:w-auto"
@@ -228,11 +249,23 @@ export default function UsersPage() {
                             day: "numeric",
                           })}
                         </p>
+                        {user.country_code && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            País: {user.country_code === "MX" ? "🇲🇽 México" : user.country_code === "UY" ? "🇺🇾 Uruguay" : user.country_code}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    <Badge variant={getRoleBadgeVariant(user.role)}>
-                      {user.role}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {user.country_code && (
+                        <Badge variant="outline" className="text-xs">
+                          {user.country_code === "MX" ? "🇲🇽" : user.country_code === "UY" ? "🇺🇾" : user.country_code}
+                        </Badge>
+                      )}
+                      <Badge variant={getRoleBadgeVariant(user.role)}>
+                        {user.role}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>

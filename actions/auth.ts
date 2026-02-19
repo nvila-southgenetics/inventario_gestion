@@ -38,6 +38,7 @@ export async function login(formData: FormData) {
 export async function inviteUser(formData: FormData) {
   const email = formData.get("email") as string;
   const role = formData.get("role") as UserRole;
+  const countryCode = formData.get("country_code") as string | null;
 
   if (!email || !role) {
     return {
@@ -60,7 +61,7 @@ export async function inviteUser(formData: FormData) {
   // Obtener el perfil del usuario actual
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role, organization_id")
+    .select("role, organization_id, country_code, email")
     .eq("id", user.id)
     .single();
 
@@ -76,6 +77,30 @@ export async function inviteUser(formData: FormData) {
     };
   }
 
+  // Determinar el country_code a usar
+  // Si el usuario es multi-país (nvila@southgenetics.com), puede especificar el país
+  // Si no, usa el país del usuario que invita
+  let finalCountryCode: string;
+  const isMultiCountry = profile.email === "nvila@southgenetics.com";
+  
+  if (isMultiCountry && countryCode) {
+    // Usuario multi-país puede especificar el país
+    finalCountryCode = countryCode;
+  } else if (isMultiCountry && !countryCode) {
+    // Si es multi-país pero no especificó país, usar MX por defecto
+    finalCountryCode = "MX";
+  } else {
+    // Usuario normal usa su propio país
+    finalCountryCode = profile.country_code || "MX";
+  }
+
+  // Validar que el país sea válido
+  if (!["MX", "UY"].includes(finalCountryCode)) {
+    return {
+      error: "País inválido. Solo se permiten MX o UY",
+    };
+  }
+
   // Invitar usuario usando el cliente admin
   // Configurar la URL de redirect para el flujo de token_hash (OTP)
   // Supabase enviará el email con token_hash que será procesado por /auth/confirm
@@ -86,6 +111,7 @@ export async function inviteUser(formData: FormData) {
       data: {
         organization_id: profile.organization_id,
         role: role,
+        country_code: finalCountryCode,
       },
       redirectTo: redirectTo,
     });
@@ -96,7 +122,7 @@ export async function inviteUser(formData: FormData) {
     };
   }
 
-  // Insertar perfil manualmente con la organización y rol correctos
+  // Insertar perfil manualmente con la organización, rol y país correctos
   if (invitedUser.user) {
     const { error: insertError } = await supabaseAdmin
       .from("profiles")
@@ -105,6 +131,7 @@ export async function inviteUser(formData: FormData) {
         email: email,
         organization_id: profile.organization_id,
         role: role,
+        country_code: finalCountryCode,
       });
 
     if (insertError) {
@@ -114,6 +141,7 @@ export async function inviteUser(formData: FormData) {
         .update({
           organization_id: profile.organization_id,
           role: role,
+          country_code: finalCountryCode,
         })
         .eq("id", invitedUser.user.id);
 

@@ -69,10 +69,10 @@ export function HistoryContent() {
       return;
     }
 
-    // Obtener organization_id
+    // Obtener organization_id y country_code
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -83,11 +83,14 @@ export function HistoryContent() {
       return;
     }
 
+    const countryCode = profile.country_code || "MX";
+
     // Cargar movimientos (filtrado por producto si se especifica)
     let movementsQuery = supabase
       .from("movements")
       .select("*")
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", countryCode)
       .order("created_at", { ascending: false })
       .limit(50);
 
