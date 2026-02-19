@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -48,11 +48,7 @@ export default function InventoryPage() {
   const [productToDelete, setProductToDelete] = useState<ProductWithCategory | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const supabase = createClient();
     const {
       data: { user },
@@ -119,7 +115,11 @@ export default function InventoryPage() {
     setProducts(productsWithCategory);
     setCategories(categoriesData || []);
     setIsLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Filtrar productos
   const filteredProducts = products.filter((product) => {
