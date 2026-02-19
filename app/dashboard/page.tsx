@@ -175,7 +175,22 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
+    <>
+      {/* Mensaje de bienvenida */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0 }}
+        className="w-full bg-green-100 py-2"
+      >
+        <div className="container mx-auto px-4">
+          <p className="text-xs text-green-800 text-center">
+            ¡Que tengas un buen día!
+          </p>
+        </div>
+      </motion.div>
+
+      <div className="container mx-auto px-4 py-6 space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Inventario */}
@@ -439,6 +454,7 @@ export default function DashboardPage() {
           </Card>
         </motion.div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
