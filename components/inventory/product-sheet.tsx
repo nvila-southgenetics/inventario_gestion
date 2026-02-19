@@ -91,7 +91,7 @@ export function ProductSheet({
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, country_code")
       .eq("id", user.id)
       .single();
 
@@ -100,10 +100,13 @@ export function ProductSheet({
       return;
     }
 
+    const countryCode = profile.country_code || "MX";
+
     const { data: categoriesData } = await supabase
       .from("categories")
       .select("*")
       .eq("organization_id", profile.organization_id)
+      .eq("country_code", countryCode)
       .order("name", { ascending: true });
 
     setCategories(categoriesData || []);

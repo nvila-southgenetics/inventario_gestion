@@ -196,6 +196,26 @@ export async function createProduct(formData: FormData) {
 
     const validatedData = productSchema.parse(rawData);
 
+    // Verificar que la categoría pertenezca al mismo país del usuario
+    const { data: category, error: categoryError } = await supabase
+      .from("categories")
+      .select("id, country_code")
+      .eq("id", validatedData.category_id)
+      .eq("organization_id", profile.organization_id)
+      .single();
+
+    if (categoryError || !category) {
+      return {
+        error: "Categoría no encontrada",
+      };
+    }
+
+    if (category.country_code !== (profile.country_code || "MX")) {
+      return {
+        error: "No puedes usar una categoría de otro país",
+      };
+    }
+
     // Verificar que el SKU no exista en la organización y país
     const { data: existingProduct } = await supabase
       .from("products")
@@ -317,23 +337,52 @@ export async function registerMovement(formData: FormData) {
       notes: rawData.notes || null,
     });
 
+    // Verificar que el producto pertenezca al mismo país del usuario
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("current_stock, name, country_code")
+      .eq("id", validatedData.product_id)
+      .single();
+
+    if (productError || !product) {
+      return {
+        error: "Producto no encontrado",
+      };
+    }
+
+    if (product.country_code !== (profile.country_code || "MX")) {
+      return {
+        error: "No puedes realizar movimientos en productos de otro país",
+      };
+    }
+
     // Si es Salida, verificar stock suficiente
     if (validatedData.type === "Salida") {
-      const { data: product, error: productError } = await supabase
-        .from("products")
-        .select("current_stock, name")
-        .eq("id", validatedData.product_id)
-        .single();
-
-      if (productError || !product) {
-        return {
-          error: "Producto no encontrado",
-        };
-      }
-
       if (product.current_stock < validatedData.quantity) {
         return {
           error: `Stock insuficiente. Stock actual: ${product.current_stock}, solicitado: ${validatedData.quantity}`,
+        };
+      }
+    }
+
+    // Si hay supplier_id, verificar que pertenezca al mismo país
+    if (validatedData.supplier_id) {
+      const { data: supplier, error: supplierError } = await supabase
+        .from("suppliers")
+        .select("id, country_code")
+        .eq("id", validatedData.supplier_id)
+        .eq("organization_id", profile.organization_id)
+        .single();
+
+      if (supplierError || !supplier) {
+        return {
+          error: "Proveedor no encontrado",
+        };
+      }
+
+      if (supplier.country_code !== (profile.country_code || "MX")) {
+        return {
+          error: "No puedes usar un proveedor de otro país",
         };
       }
     }
@@ -360,6 +409,53 @@ export async function registerMovement(formData: FormData) {
       return {
         error: error.message,
       };
+    }
+
+    // Verificar si el producto quedó con bajo stock después del movimiento
+    const { data: updatedProduct, error: productCheckError } = await supabase
+      .from("products")
+      .select("id, name, sku, current_stock, min_stock")
+      .eq("id", validatedData.product_id)
+      .single();
+
+    if (!productCheckError && updatedProduct) {
+      // Si el stock actual es menor o igual al mínimo, enviar webhook
+      if (updatedProduct.current_stock <= updatedProduct.min_stock) {
+        // Obtener todos los emails de usuarios del mismo país y organización
+        const { data: countryUsers, error: usersError } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("organization_id", profile.organization_id)
+          .eq("country_code", profile.country_code || "MX");
+
+        if (!usersError && countryUsers && countryUsers.length > 0) {
+          const emails = countryUsers.map((u) => u.email).filter(Boolean);
+
+          // Enviar webhook de bajo stock
+          try {
+            await fetch("https://n8n.srv908725.hstgr.cloud/webhook/bajo_stock", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                emails: emails,
+                product: {
+                  id: updatedProduct.id,
+                  name: updatedProduct.name,
+                  sku: updatedProduct.sku,
+                  current_stock: updatedProduct.current_stock,
+                  min_stock: updatedProduct.min_stock,
+                },
+                country_code: profile.country_code || "MX",
+              }),
+            });
+          } catch (webhookError) {
+            // No fallar el movimiento si el webhook falla, solo loguear el error
+            console.error("Error al enviar webhook de bajo stock:", webhookError);
+          }
+        }
+      }
     }
 
     revalidatePath("/dashboard/inventory");
@@ -461,6 +557,26 @@ export async function updateProduct(productId: string, formData: FormData) {
       };
     }
 
+    // Verificar que la categoría pertenezca al mismo país del usuario
+    const { data: category, error: categoryError } = await supabase
+      .from("categories")
+      .select("id, country_code")
+      .eq("id", validatedData.category_id)
+      .eq("organization_id", profile.organization_id)
+      .single();
+
+    if (categoryError || !category) {
+      return {
+        error: "Categoría no encontrada",
+      };
+    }
+
+    if (category.country_code !== (profile.country_code || "MX")) {
+      return {
+        error: "No puedes usar una categoría de otro país",
+      };
+    }
+
     // Si el SKU cambió, verificar que no exista otro producto con ese SKU en el mismo país
     if (existingProduct.sku !== validatedData.sku) {
       const { data: duplicateProduct } = await supabase
@@ -500,6 +616,44 @@ export async function updateProduct(productId: string, formData: FormData) {
       return {
         error: error.message,
       };
+    }
+
+    // Verificar si el producto quedó con bajo stock después de la actualización
+    if (data && data.current_stock <= data.min_stock) {
+      // Obtener todos los emails de usuarios del mismo país y organización
+      const { data: countryUsers, error: usersError } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("organization_id", profile.organization_id)
+        .eq("country_code", profile.country_code || "MX");
+
+      if (!usersError && countryUsers && countryUsers.length > 0) {
+        const emails = countryUsers.map((u) => u.email).filter(Boolean);
+
+        // Enviar webhook de bajo stock
+        try {
+          await fetch("https://n8n.srv908725.hstgr.cloud/webhook/bajo_stock", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              emails: emails,
+              product: {
+                id: data.id,
+                name: data.name,
+                sku: data.sku,
+                current_stock: data.current_stock,
+                min_stock: data.min_stock,
+              },
+              country_code: profile.country_code || "MX",
+            }),
+          });
+        } catch (webhookError) {
+          // No fallar la actualización si el webhook falla, solo loguear el error
+          console.error("Error al enviar webhook de bajo stock:", webhookError);
+        }
+      }
     }
 
     revalidatePath("/dashboard/inventory");
